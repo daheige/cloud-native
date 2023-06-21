@@ -1,22 +1,23 @@
 # centos7.9安装
 1. 最小安装centos7
-    下载virtualbox 软件 和 centos7.9 操作系统
-    virtualbox: https://www.virtualbox.org/ 根据自己的操作系统下载对应的版本
-    centos7.9: http://mirrors.163.com/centos/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2207-02.iso
+    - 下载virtualbox 软件 和 centos7.9 操作系统
+	    virtualbox: https://www.virtualbox.org/ 根据自己的操作系统下载对应的版本
+	    centos7.9: http://mirrors.163.com/centos/7.9.2009/isos/x86_64/CentOS-7-x86_64-Minimal-2207-02.iso
 
-    下载到本地后，先安装好virtualbox，然后安装centos7.9（这里我每个主机设置的用户是heige)
-    centos7.9 最小安装后，先设置一台的主机的网络为dhcp模式，等启动后，安装必要的软件
-    ```shell
-    yum install vim -y
-    yum install net-tools -y
-    ```
+    - 下载到本地后，先安装好virtualbox，然后安装centos7.9（这里我每个主机设置的用户是heige)
+	    centos7.9 最小安装后，先设置一台的主机的网络为dhcp模式，等启动后，安装必要的软件
+	    ```shell
+	    yum install vim -y
+	    yum install net-tools -y
+	    ```
 2. 复制出两个主机centos7-2,centos7-3,复制的时候重新生成每台的mac地址
 3. 设置3台主机网络连接为静态ip模式
     三台主机ip约定：
-    192.168.0.13    master
-    192.168.0.14    slave
-    192.168.0.15    slave
-
+	```
+	192.168.0.13 k8s-master01 
+	192.168.0.14 k8s-node01 
+	192.168.0.15 k8s-node02
+	```
     对应的gateway：192.168.0.1
 
     安装后，设置每个主机的静态ip
@@ -105,7 +106,7 @@
     DNS1=114.114.114.114  #设置国内DNS地址
     DNS2=223.5.5.5 #ali DNS
     ```
-4. 分别启动三台主机，输入用户和密码并登陆
+5. 分别启动三台主机，输入用户和密码并登陆
 
 # k8s安装前的准备
 1. 安装wget
@@ -277,7 +278,7 @@ vi /etc/hosts 添加如下内容
 :wq
 
 # 安装docker
-先卸载就版本
+先卸载旧版本
 ```shell
 yum remove docker \
                   docker-client \
@@ -327,8 +328,10 @@ $ vim /etc/docker/daemon.json
 {
     "exec-opts": ["native.cgroupdriver=systemd"],
     "registry-mirrors": [
+    	"https://mirror.baidubce.com",
         "https://docker.mirrors.ustc.edu.cn",
         "https://hub-mirror.c.163.com",
+	"https://mirror.ccs.tencentyun.com",
         "https://dockerhub.azk8s.cn",
         "https://reg-mirror.qiniu.com",
         "https://registry.docker-cn.com"
@@ -472,7 +475,7 @@ Loaded image: k8s.gcr.io/etcd:3.5.7-0
 Loaded image: k8s.gcr.io/pause:3.9
 Loaded image: k8s.gcr.io/kube-proxy:v1.27.3
 ```
-对于子节点来说，node节点需要 kube-proxy:v1.27.3 和 pause:3.9 这2个镜像
+对于子节点来说，node节点需要 `kube-proxy:v1.27.3` 和 `pause:3.9` 这2个镜像
 
 ```shell
 # 生成子节点需要的镜像
@@ -484,20 +487,30 @@ k8s.gcr.io/pause:3.9
 上面的步骤每个节点都需要安装一遍
 下面的内容是master节点初始化的
 
-# 初始化集群
+# master初始化集群
 1. 配置k8s集群网络
 ```shell
-docker pull calico/cni:v3.20.1 
-docker pull calico/pod2daemon-flexvol:v3.20.1
-docker pull calico/node:v3.20.1 
-docker pull calico/kube-controllers:v3.20.1
+# 官网下载地址： 
+# https://docs.projectcalico.org/v3.24/manifests/calico.yaml 
+# github地址： 
+# https://github.com/projectcalico/calico
+
+# 通过docker镜像下载，执行如下命令
+docker pull calico/cni:v3.24.6 
+docker pull calico/pod2daemon-flexvol:v3.24.6
+docker pull calico/node:v3.24.6 
+docker pull calico/kube-controllers:v3.24.6
 
 # 配置hostname： 
 hostnamectl set-hostname k8s-master01
 ```
 
 初始化
-kubeadm init --apiserver-advertise-address=192.168.0.13 --kubernetes-version v1.27.3 --service-cidr=10.1.0.0/16 --pod-network-cidr=10.81.0.0/16
+```shell
+# 指定service资源的网段 10.96.0.0/12
+# 指定Pod资源的网段 10.244.0.0/16
+kubeadm init --apiserver-advertise-address=192.168.0.13 --kubernetes-version v1.27.3 --service-cidr=10.96.0.0/12 --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=all
+```
 
 ```shell
 kubeadm config print init-defaults > init.default.yaml
@@ -507,10 +520,13 @@ vim init-config.yaml
 apiVersion: kubeadm.k8s.io/v1beta3
 imageRepository: registry.aliyuncs.com/google_containers
 kind: ClusterConfiguration
-kubernetesVersion: 1.27.0
+localAPIEndpoint:
+   advertiseAddress: 192.168.0.13 # 注意：修改配置文件的IP地址，此地址要改为master节点地址
+kubernetesVersion: 1.27.3
 networking:
   dnsDomain: cluster.local
-  serviceSubnet: 10.96.0.0/12
+  serviceSubnet: 10.96.0.0/12 # k8s默认service使用的子网
+  podSubnet: 10.244.0.0/16 # pods使用的子网
 
 kubeeadm init --config=init-config.yaml
 ```
@@ -525,7 +541,7 @@ kubeeadm init --config=init-config.yaml
 # node节点加入集群信息
 在master机器上执行
 ```shell
-kubeadm join 192.168.0.14:6443 --token kksfgq.b9bhf82y35ufw4np \ 
+kubeadm join 192.168.0.13:6443 --token kksfgq.b9bhf82y35ufw4np \ 
         --discovery-token-ca-cert-hash sha256:e1e347e6db1db5c13fcdc2c7d51a2f9029100a4cc13c2d89a2dbfa5077f5b07f
 ```
 依次加入节点
@@ -539,16 +555,24 @@ source ~/.bash_profile
 # 测试 k8s 集群环境
 kubectl get nodes
 
+# 部署calico网络插件（master节点操作）
 在master节点上执行
 ```shell
-wget https://docs.projectcalico.org/v3.14/manifests/calico.yaml
+wget https://docs.projectcalico.org/v3.24/manifests/calico.yaml
+vim calico.yaml		
+# 找到如下两行，取消注释并修改。在集群初始化时指定了Pod网络网段为10.244.0.0/16，calico的默认网段为192.168.0.0/16，所以我们需要先修改下配置文件
+    - name: CALICO_IPV4POOL_CIDR
+      value: "10.244.0.0/16"
+	      
 kubectl apply -f calico.yml
 ```
 到此处表明k8s集群部署成功～
 
 # 参考地址
-https://juejin.cn/post/7156220816529555487
-https://juejin.cn/post/6971674359975018532
-https://juejin.cn/post/7078941643734269959
-https://juejin.cn/post/7082645339676606472
+- https://juejin.cn/post/7156220816529555487
+- https://juejin.cn/post/6971674359975018532
+- https://juejin.cn/post/7078941643734269959
+- https://juejin.cn/post/7082645339676606472
+- https://blog.csdn.net/weixin_41947378/article/details/110824711
+- https://www.cnblogs.com/ccbloom/p/11320407.html
 
