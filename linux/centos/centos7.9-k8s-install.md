@@ -14,9 +14,9 @@
 3. 设置3台主机网络连接为静态ip模式
     三台主机ip约定：
 	```
-	192.168.0.13 k8s-master01 
-	192.168.0.14 k8s-node01 
-	192.168.0.15 k8s-node02
+	192.168.0.13 k8s-master01 2核4G内存
+	192.168.0.14 k8s-node01 2核2G内存
+	192.168.0.15 k8s-node02 2核2G内存
 	```
     对应的gateway：192.168.0.1
 
@@ -397,6 +397,7 @@ yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3 --nogpgcheck --disab
 # 设置开机启动
 systemctl enable kubelet
 ```
+
 3. 查看kubeadm、kubelet版本
 ```shell
 # kubelet --version
@@ -489,6 +490,10 @@ Then you can join any number of worker nodes by running the following on each as
 kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
         --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
 ```
+如果忘记了token，通过下面的命令重新生成
+```shell
+kubeadm token create --print-join-command
+```
 
 在初始化master节点，可能遇到的问题
 如果 kubectl get cs 发现集群不健康，更改以下两个文件
@@ -540,6 +545,9 @@ kubectl get nodes
 5. node节点加入集群信息
 - 对于其他节点，k8s-node01 和 k8s-node02 除了master节点kubeadm init操作，其他的操作都需要进行。
 - 在子节点安装好kubeadm,kubectl工具后，执行如下操作，将节点加入k8s集群。
+- 子节点安装后，需要 systemctl enable kubelet 然后重启服务器 reboot
+
+当子节点重启后，就在子节点机器上执行如下命令，加入集群
 ```shell
 kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
         --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
@@ -600,6 +608,8 @@ complete -F __start_kubectl k
 除了calico外，也可以使用 flannel配置网络
 ```shell
 wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+#如果无法下载，就直接访问 https://github.com/flannel-io/flannel/blob/master/Documentation/kube-flannel.yml
+#复制出来，建立 kube-flannel.yml 文件即可。
 kubectl apply -f kube-flannel.yml
 ```
 
@@ -608,3 +618,5 @@ kubectl apply -f kube-flannel.yml
 - https://juejin.cn/post/6850418111942754317
 - https://juejin.cn/post/6950166816182239246
 - https://blog.csdn.net/zo2k123/article/details/130328617
+- https://www.cnblogs.com/chaofan-/p/12930199.html
+- https://juejin.cn/post/6971674359975018532
