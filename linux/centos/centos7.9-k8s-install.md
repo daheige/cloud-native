@@ -393,7 +393,7 @@ yum -y makecache
 
 2. 安装 kubeadm / kubelet / kubectl 并启动 kubelet
 ```shell
-yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3 --nogpgcheck --disableexcludes=kubernetes
+yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3
 
 # 设置开机启动
 systemctl enable kubelet
