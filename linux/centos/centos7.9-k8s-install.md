@@ -191,7 +191,8 @@ vim /etc/sysctl.conf
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1 
 net.bridge.bridge-nf-call-arptables = 1 
-net.ipv4.ip_forward=1 net.ipv4.ip_forward_use_pmtu = 0
+net.ipv4.ip_forward= 1
+net.ipv4.ip_forward_use_pmtu = 0
 ```
 :wq
 
@@ -224,6 +225,18 @@ chmod 755 /etc/sysconfig/modules/ipvs.modules
 bash /etc/sysconfig/modules/ipvs.modules
 lsmod | grep -e ip_vs -e nf_conntrack
 ```
+加载内核模块
+```shell
+vim /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+```
+:wq 然后执行
+```shell
+modprobe overlay
+modprobe br_netfilter
+```
+
 重启 reboot
 检查是否生效
 ```shell
@@ -231,20 +244,23 @@ lsmod | grep -e ip_vs -e nf_conntrack
 ip_vs_rr               16384  0 
 ip_vs                 155648  6 ip_vs_rr,ip_vs_sh,ip_vs_wrr
 ```
+
 5. 同步时间
 ```shell
 yum -y install ntpdate
-ntpdate time1.aliyun.com
+ntpdate cn.pool.ntp.org
 # 删除本地时间并设置时区为上海
 rm -rf /etc/localtime 
 ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+```
 
 # 设置计划任务 crontab -e 添加
 ```shell
-*/5 * * * * ntpdate time1.aliyun.com
+*/5 * * * * ntpdate cn.pool.ntp.org
 ```
 
-# 查看时间 
+查看系统时间
+```shell
 date -R || date
 ```
 6. 命令补全
@@ -260,10 +276,8 @@ source /etc/profile.d/bash_completion.sh
 swapoff -a
 
 # 永久关闭
-vi /etc/fstab
-
-# 将文件中的/dev/mapper/centos-swap这行代码注释掉
-# /dev/mapper/centos-swap swap swap defaults 0 0
+sed -ri 's/.*swap.*/#&/' /etc/fstab
+sed -ri 's/.*swap.*/#$/' /etc/fstab
 
 # 确认swap已经关闭：若swap行都显示 0 则表示关闭成功
 free -m
@@ -310,16 +324,16 @@ yum update -y && yum install -y docker-ce
 ```
 启动docker
 ```shell
-systemctl start docker
-systemctl status docker
+systemctl start docker && systemctl status docker
+systemctl start containerd && systemctl status containerd
 ```
 设置开机启动
 ```shell
 systemctl enable docker
+systemctl enable containerd
 ```
 
-
-设置 Docker daemon 文件
+# 设置 Docker daemon 文件
 ```shell
 # 创建目录用来存放 daemon.json
 $ cd /etc/docker
@@ -328,10 +342,11 @@ $ vim /etc/docker/daemon.json
 {
     "exec-opts": ["native.cgroupdriver=systemd"],
     "registry-mirrors": [
-    	"https://mirror.baidubce.com",
+        "https://mirror.baidubce.com",
+        "https://6ijb8ubo.mirror.aliyuncs.com",
         "https://docker.mirrors.ustc.edu.cn",
         "https://hub-mirror.c.163.com",
-	"https://mirror.ccs.tencentyun.com",
+        "https://mirror.ccs.tencentyun.com",
         "https://dockerhub.azk8s.cn",
         "https://reg-mirror.qiniu.com",
         "https://registry.docker-cn.com"
@@ -364,8 +379,7 @@ baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg
-       https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 ```
 :wq
 
@@ -373,206 +387,224 @@ gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg
 ```shell
 yum clean all
 yum -y makecache
-# 验证源是否可用
-yum list | grep kubeadm
-kubeadm.x86_64                           1.27.3-0                      kubernetes
-
 # 如果提示要验证yum-key.gpg是否可用，输入y
-# 查找到kubeadm 显示版本
 ```
 
 2. 安装 kubeadm / kubelet / kubectl 并启动 kubelet
 ```shell
-yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3 --nogpgcheck --disableexcludes=kubernetes
 
 # 设置开机启动
-systemctl enable kubelet && systemctl start kubelet
+systemctl enable kubelet
 ```
 3. 查看kubeadm、kubelet版本
 ```shell
 # kubelet --version
-Kubernetes v1.27.3
+Kubernetes v1.21.3
 ```
 4. 增加配置信息
 ```shell
 # 如果不配置kubelet，可能会导致K8S集群无法启动。为实现docker使用的cgroupdriver与kubelet 使用的cgroup的一致性。
 vi /etc/sysconfig/kubelet
 KUBELET_EXTRA_ARGS="--cgroup-driver=systemd"
+
+vim /var/lib/kubelet/kubeadm-flags.env
+KUBELET_KUBEADM_ARGS="--network-plugin=cni --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.4.1"
 ```
 
-# 安装kubernetes集群
-1. 关闭swap
+5. 查看k8s需要的镜像
 ```shell
-sed -ri 's/.*swap.*/#$/' /etc/fstab
-```
-2. 查看所需要的镜像
-```shell
+#查看会拉取的镜像清单
 kubeadm config images list
-registry.k8s.io/kube-apiserver:v1.27.3
-registry.k8s.io/kube-controller-manager:v1.27.3
-registry.k8s.io/kube-scheduler:v1.27.3
-registry.k8s.io/kube-proxy:v1.27.3
-registry.k8s.io/pause:3.9
-registry.k8s.io/etcd:3.5.7-0
-registry.k8s.io/coredns/coredns:v1.10.1
-```
-3. 编写执行脚本
-```shell
-mkdir -p /data/
-cd /data/
-vim k8s.sh
-# 添加如下内容：
-images=( 
-	kube-apiserver:v1.27.3
-	kube-controller-manager:v1.27.3
-	kube-scheduler:v1.27.3
-	kube-proxy:v1.27.3
-	pause:3.9
-	etcd:3.5.7-0
-	coredns:1.10.1 
-)
-for imageName in ${images[@]};
-do
-	docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/$imageName
-	docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/$imageName k8s.gcr.io/$imageName
-	docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/$imageName
-done
-```
-执行脚本
-```shell
-cd /data 
-# 给脚本授权 
-chmod +x k8s.sh
-# 执行脚本 
-./k8s.sh
-```
-4. 保存镜像
-```shell
-docker save -o k8s.1.27.3.tar \
-k8s.gcr.io/kube-proxy:v1.27.3 \
-k8s.gcr.io/kube-apiserver:v1.27.3 \
-k8s.gcr.io/kube-controller-manager:v1.27.3 \
-k8s.gcr.io/kube-scheduler:v1.27.3 \
-k8s.gcr.io/coredns:1.10.1 \
-k8s.gcr.io/etcd:3.5.7-0 k8s.gcr.io/pause:3.9
-```
-查看是否保存成功
-```shell
-# ls
-k8s-1.27.3-images.sh  k8s.1.27.3.tar
+k8s.gcr.io/kube-apiserver:v1.21.3
+k8s.gcr.io/kube-controller-manager:v1.21.3
+k8s.gcr.io/kube-scheduler:v1.21.3
+k8s.gcr.io/kube-proxy:v1.21.3
+k8s.gcr.io/pause:3.4.1
+k8s.gcr.io/etcd:3.4.13-0
+k8s.gcr.io/coredns/coredns:v1.8.0
+
+#手动提前拉取镜像，可以看到拉取过程及拉取情况
+kubeadm config images pull --image-repository registry.aliyuncs.com/google_containers
+
 ```
 
-5. 导入镜像
-导入master节点镜像tar包
+# 子节点主机名设置
+安装好对应的子节点后，设置主机，以 k8s-node01 为例子
 ```shell
-# master节点需要全部镜像 
-# docker load -i k8s.1.27.3.tar
-Loaded image: k8s.gcr.io/kube-apiserver:v1.27.3
-Loaded image: k8s.gcr.io/kube-controller-manager:v1.27.3
-Loaded image: k8s.gcr.io/kube-scheduler:v1.27.3
-Loaded image: k8s.gcr.io/coredns:1.10.1
-Loaded image: k8s.gcr.io/etcd:3.5.7-0
-Loaded image: k8s.gcr.io/pause:3.9
-Loaded image: k8s.gcr.io/kube-proxy:v1.27.3
-```
-对于子节点来说，node节点需要 `kube-proxy:v1.27.3` 和 `pause:3.9` 这2个镜像
-
-```shell
-# 生成子节点需要的镜像
-docker save -o k8s.1.27.3.node.tar \
-k8s.gcr.io/kube-proxy:v1.27.3 \
-k8s.gcr.io/pause:3.9
+hostnamectl set-hostname k8s-node01
+#hostnamectl set-hostname k8s-node02
 ```
 
-上面的步骤每个节点都需要安装一遍
-下面的内容是master节点初始化的
-
-# master初始化集群
-1. 配置k8s集群网络
+# 部署k8s集群
+1. master节点上初始化kubeadm
 ```shell
-# 官网下载地址： 
-# https://docs.projectcalico.org/v3.24/manifests/calico.yaml 
+# 配置hostname：
+hostnamectl set-hostname k8s-master01
+
+#初始化kubeadm
+kubeadm init \
+--apiserver-advertise-address=192.168.0.13 \
+--image-repository registry.aliyuncs.com/google_containers \
+--kubernetes-version v1.21.3 \
+--service-cidr=10.96.0.0/12 \
+--pod-network-cidr=10.244.0.0/16 \
+--token-ttl=0 --ignore-preflight-errors=all
+```
+关于上面的配置说明：
+```
+    *****可选参数*****
+    --apiserver-advertise-address：apiserver通告给其他组件的IP地址，一般应该为Master节点的用于集群内部通信的IP地址，0.0.0.0表示节点上所有可用地址
+    --apiserver-bind-port：apiserver的监听端口，默认是6443
+    --cert-dir：通讯的ssl证书文件，默认/etc/kubernetes/pki
+    --control-plane-endpoint：控制台平面的共享终端，可以是负载均衡的ip地址或者dns域名，高可用集群时需要添加
+    --image-repository：拉取镜像的镜像仓库，默认是k8s.gcr.io
+    --kubernetes-version：指定kubernetes版本
+    --pod-network-cidr：pod资源的网段，需与pod网络插件的值设置一致。Flannel网络插件的默认为10.244.0.0/16，Calico插件的默认值为192.168.0.0/16；
+    --service-cidr：service资源的网段
+    --service-dns-domain：service全域名的后缀，默认是cluster.local
+    --token-ttl：默认token的有效期为24小时，如果不想过期，可以加上 --token-ttl=0 这个参数
+```
+
+当出现下面的提示表示k8s初始化成功
+```shell
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
+        --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
+```
+
+在初始化master节点，可能遇到的问题
+如果 kubectl get cs 发现集群不健康，更改以下两个文件
+```shell
+vim /etc/kubernetes/manifests/kube-scheduler.yaml 
+vim /etc/kubernetes/manifests/kube-controller-manager.yaml
+
+#修改如下内容:
+把--bind-address=127.0.0.1变成--bind-address=192.168.0.13 #修改成k8s的控制节点master01的ip 
+把httpGet:字段下的hosts由127.0.0.1变成192.168.0.13（有两处） 
+#- --port=0 # 搜索port=0，把这一行注释掉
+systemctl restart kubelet  #重启kubelet
+```
+
+2. 查看k8s运行状态
+```shell
+# systemctl status kubelet
+● kubelet.service - kubelet: The Kubernetes Node Agent
+   Loaded: loaded (/usr/lib/systemd/system/kubelet.service; enabled; vendor preset: disabled)
+  Drop-In: /usr/lib/systemd/system/kubelet.service.d
+           └─10-kubeadm.conf
+   Active: active (running) since 五 2023-06-23 18:36:06 CST; 3min 16s ago
+     Docs: https://kubernetes.io/docs/
+ Main PID: 17725 (kubelet)
+    Tasks: 14
+   Memory: 42.7M
+```
+
+上面的步骤每个节点除了master初始化操作，其他操作都需要安装一遍
+
+3. 使用kubectl管理工具初始化，执行以下命令可使用kubectl管理工具
+```shell
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+4. 查看状态
+```shell
+kubectl get svc
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   13m
+```
+测试 k8s 集群环境
+```shell
+kubectl get nodes
+```
+
+5. node节点加入集群信息
+- 对于其他节点，k8s-node01 和 k8s-node02 除了master节点kubeadm init操作，其他的操作都需要进行。
+- 在子节点安装好kubeadm,kubectl工具后，执行如下操作，将节点加入k8s集群。
+```shell
+kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
+        --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
+```
+
+这个时候查看集群状态都是为NotReady，这是因为还没有配置网络插件
+6. 部署calico网络插件（master节点操作）
+```shell
+# 官网下载地址：
+# https://docs.projectcalico.org/v3.20/manifests/calico.yaml
+
 # github地址： 
 # https://github.com/projectcalico/calico
 
 # 通过docker镜像下载，执行如下命令
-docker pull calico/cni:v3.24.6 
-docker pull calico/pod2daemon-flexvol:v3.24.6
-docker pull calico/node:v3.24.6 
-docker pull calico/kube-controllers:v3.24.6
-
-# 配置hostname： 
-hostnamectl set-hostname k8s-master01
+docker pull calico/cni:v3.20.6 
+docker pull calico/pod2daemon-flexvol:v3.20.6
+docker pull calico/node:v3.20.6 
+docker pull calico/kube-controllers:v3.20.6
 ```
 
-初始化
+calico 初始化，在master节点上执行
 ```shell
-# 指定service资源的网段 10.96.0.0/12
-# 指定Pod资源的网段 10.244.0.0/16
-kubeadm init --apiserver-advertise-address=192.168.0.13 --kubernetes-version v1.27.3 --service-cidr=10.96.0.0/12 --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=all
-```
-
-```shell
-kubeadm config print init-defaults > init.default.yaml
-mv init-default.yaml init-config.yaml
-# 修改init-config.yaml 文件，修改镜像地址信息
-vim init-config.yaml
-apiVersion: kubeadm.k8s.io/v1beta3
-imageRepository: registry.aliyuncs.com/google_containers
-kind: ClusterConfiguration
-localAPIEndpoint:
-   advertiseAddress: 192.168.0.13 # 注意：修改配置文件的IP地址，此地址要改为master节点地址
-kubernetesVersion: 1.27.3
-networking:
-  dnsDomain: cluster.local
-  serviceSubnet: 10.96.0.0/12 # k8s默认service使用的子网
-  podSubnet: 10.244.0.0/16 # pods使用的子网
-
-kubeeadm init --config=init-config.yaml
-```
-
-执行配置命令
-```shell
-    mkdir -p $HOME/.kube 
-    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config 
-    sudo chown $(id -u):$(id -g) $HOME/.kube/config
-```
-
-# node节点加入集群信息
-在master机器上执行
-```shell
-kubeadm join 192.168.0.13:6443 --token kksfgq.b9bhf82y35ufw4np \ 
-        --discovery-token-ca-cert-hash sha256:e1e347e6db1db5c13fcdc2c7d51a2f9029100a4cc13c2d89a2dbfa5077f5b07f
-```
-依次加入节点
-
-# k8s自动补全
-```shell
-echo "source <(kubectl completion bash)" >> ~/.bash_profile 
-source ~/.bash_profile
-```
-
-# 测试 k8s 集群环境
-kubectl get nodes
-
-# 部署calico网络插件（master节点操作）
-在master节点上执行
-```shell
-wget https://docs.projectcalico.org/v3.24/manifests/calico.yaml
+wget https://docs.projectcalico.org/v3.20/manifests/calico.yaml
 vim calico.yaml		
 # 找到如下两行，取消注释并修改。在集群初始化时指定了Pod网络网段为10.244.0.0/16，calico的默认网段为192.168.0.0/16，所以我们需要先修改下配置文件
     - name: CALICO_IPV4POOL_CIDR
       value: "10.244.0.0/16"
 	      
 kubectl apply -f calico.yml
+# 查看状态
+kubectl get nodes
+NAME           STATUS   ROLES                  AGE     VERSION
+k8s-master01   Ready    control-plane,master   6m51s   v1.21.3
+
 ```
 到此处表明k8s集群部署成功～
 
+# k8s自动补全
+```shell
+source /usr/share/bash-completion/bash_completion
+source <(kubectl completion bash)
+echo "source <(kubectl completion bash)" >> ~/.bash_profile
+source ~/.bash_profile
+
+# 将k8s资源写入到bash-completion的补全脚本中文件中，从而实现永久k8s资源的永久化
+kubectl completion bash >/etc/bash_completion.d/kubectl # 永久生效 方法二
+```
+
+设置别名 vim ~/.bash_profile 新增如下内容：
+```shell
+alias k=kubectl   # 在文件～/.bashrc文件中新增一行
+#使别名和自动补全同时生效
+complete -F __start_kubectl k
+```
+
+# 关于k8s网络配置
+除了calico外，也可以使用 flannel配置网络
+```shell
+wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+kubectl apply -f kube-flannel.yml
+```
+
 # 参考地址
 - https://juejin.cn/post/7156220816529555487
-- https://juejin.cn/post/6971674359975018532
-- https://juejin.cn/post/7078941643734269959
-- https://juejin.cn/post/7082645339676606472
-- https://blog.csdn.net/weixin_41947378/article/details/110824711
-- https://www.cnblogs.com/ccbloom/p/11320407.html
-
+- https://juejin.cn/post/6850418111942754317
+- https://juejin.cn/post/6950166816182239246
+- https://blog.csdn.net/zo2k123/article/details/130328617
