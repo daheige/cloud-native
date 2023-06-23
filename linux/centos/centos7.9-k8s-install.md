@@ -276,9 +276,10 @@ source /etc/profile.d/bash_completion.sh
 swapoff -a
 
 # 永久关闭
-sed -ri 's/.*swap.*/#&/' /etc/fstab
-sed -ri 's/.*swap.*/#$/' /etc/fstab
+vi /etc/fstab
 
+# 将文件中的/dev/mapper/centos-swap这行代码注释掉
+# /dev/mapper/centos-swap swap swap defaults 0 0
 # 确认swap已经关闭：若swap行都显示 0 则表示关闭成功
 free -m
 ```
