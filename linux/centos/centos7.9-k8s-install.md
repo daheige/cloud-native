@@ -182,8 +182,7 @@ systemctl disable firewalld
 ```
 2. 关闭 selinux
 ```shell
-sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
-setenforce 0
+sed -i 's/enforcing/disabled/' /etc/selinux/config && setenforce 0
 ```
 3. 网桥过滤
 vim /etc/sysctl.conf
@@ -277,7 +276,7 @@ swapoff -a
 
 # 永久关闭
 vi /etc/fstab
-
+sed -ri 's/.*swap.*/#&/' /etc/fstab
 # 将文件中的/dev/mapper/centos-swap这行代码注释掉
 # /dev/mapper/centos-swap swap swap defaults 0 0
 # 确认swap已经关闭：若swap行都显示 0 则表示关闭成功
