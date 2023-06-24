@@ -584,7 +584,7 @@ k8s-master01   Ready    control-plane,master   6m51s   v1.21.3
 到此处表明k8s集群部署成功～
 
 # Node节点加入集群
-- 未经过kubeadm init 或者 kubeadm join后，kubelet会不断重启，这个是正常现象……，执行init或join后问题会自动解决，对此官网有如下描述，也就是此时不用理会kubelet.service。
+- 未经过kubeadm init 或者 kubeadm join后，kubelet会不断重启，这个是正常现象……，执行init或join后问题会自动解决，对此官网有描述，此时不用理会kubelet.service。
 - 对于其他节点，k8s-node01 和 k8s-node02 除了master节点kubeadm init操作，其他的操作都需要进行。
 - 在子节点安装好kubeadm,kubectl工具后，执行如下操作，将节点加入k8s集群。
 - 子节点安装后，需要 systemctl enable kubelet 然后重启服务器 reboot
