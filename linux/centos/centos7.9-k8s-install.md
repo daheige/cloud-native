@@ -659,3 +659,4 @@ kubectl apply -f kube-flannel.yml
 - https://blog.csdn.net/zo2k123/article/details/130328617
 - https://www.cnblogs.com/chaofan-/p/12930199.html
 - https://juejin.cn/post/6971674359975018532
+- https://juejin.cn/post/7107954026875977764
