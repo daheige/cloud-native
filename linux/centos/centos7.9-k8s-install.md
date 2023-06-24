@@ -1,4 +1,14 @@
-# centos7.9安装
+# centos7.9部署k8s集群
+系统：centos7.9 最小安装版本
+docker版本：v24.0.2
+kubernetes: v1.21.3
+集群模式：一主2从
+192.168.0.13 k8s-master01 2核4G内存
+192.168.0.14 k8s-node01 2核2G内存
+192.168.0.15 k8s-node02 2核2G内存
+网络插件：calico v3.20.6
+
+# centos7.9最小安装
 1. 最小安装centos7
     - 下载virtualbox 软件 和 centos7.9 操作系统
 	    virtualbox: https://www.virtualbox.org/ 根据自己的操作系统下载对应的版本
