@@ -182,7 +182,8 @@ systemctl disable firewalld
 ```
 2. 关闭 selinux
 ```shell
-sed -i 's/enforcing/disabled/' /etc/selinux/config && setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=disabled/' /etc/selinux/config
+setenforce 0
 ```
 3. 网桥过滤
 vim /etc/sysctl.conf
@@ -291,6 +292,13 @@ vi /etc/hosts 添加如下内容
 ```
 :wq
 
+# 子节点主机名设置
+安装好对应的子节点后，设置主机，以 k8s-node01 为例子
+```shell
+hostnamectl set-hostname k8s-node01
+#hostnamectl set-hostname k8s-node02
+```
+
 # 安装docker
 先卸载旧版本
 ```shell
@@ -395,7 +403,7 @@ yum -y makecache
 yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3
 
 # 设置开机启动
-systemctl enable kubelet
+systemctl enable --now kubelet
 ```
 
 3. 查看kubeadm、kubelet版本
@@ -428,13 +436,6 @@ k8s.gcr.io/coredns/coredns:v1.8.0
 #手动提前拉取镜像，可以看到拉取过程及拉取情况
 kubeadm config images pull --image-repository registry.aliyuncs.com/google_containers
 
-```
-
-# 子节点主机名设置
-安装好对应的子节点后，设置主机，以 k8s-node01 为例子
-```shell
-hostnamectl set-hostname k8s-node01
-#hostnamectl set-hostname k8s-node02
 ```
 
 # 部署k8s集群
@@ -526,9 +527,17 @@ systemctl restart kubelet  #重启kubelet
 
 3. 使用kubectl管理工具初始化，执行以下命令可使用kubectl管理工具
 ```shell
-  mkdir -p $HOME/.kube
-  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+# 对于非root用户，设置kubectl
+```shell
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+临时生效（退出当前窗口重连环境变量失效）
+$ export KUBECONFIG=/etc/kubernetes/admin.conf
+# 永久生效（推荐）
+$ echo "export KUBECONFIG=/etc/kubernetes/admin.conf" >> ~/.bash_profile
+$ source  ~/.bash_profile
 ```
 
 4. 查看状态
@@ -541,20 +550,8 @@ kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   13m
 ```shell
 kubectl get nodes
 ```
-
-5. node节点加入集群信息
-- 对于其他节点，k8s-node01 和 k8s-node02 除了master节点kubeadm init操作，其他的操作都需要进行。
-- 在子节点安装好kubeadm,kubectl工具后，执行如下操作，将节点加入k8s集群。
-- 子节点安装后，需要 systemctl enable kubelet 然后重启服务器 reboot
-
-当子节点重启后，就在子节点机器上执行如下命令，加入集群
-```shell
-kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
-        --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
-```
-
-这个时候查看集群状态都是为NotReady，这是因为还没有配置网络插件
-6. 部署calico网络插件（master节点操作）
+这个时候查看集群状态都是为NotReady，这是因为还没有配置网络插件，接着执行下面的操作
+5. 部署calico网络插件（master节点操作）
 ```shell
 # 官网下载地址：
 # https://docs.projectcalico.org/v3.20/manifests/calico.yaml
@@ -585,6 +582,48 @@ k8s-master01   Ready    control-plane,master   6m51s   v1.21.3
 
 ```
 到此处表明k8s集群部署成功～
+
+# Node节点加入集群
+- 未经过kubeadm init 或者 kubeadm join后，kubelet会不断重启，这个是正常现象……，执行init或join后问题会自动解决，对此官网有如下描述，也就是此时不用理会kubelet.service。
+- 对于其他节点，k8s-node01 和 k8s-node02 除了master节点kubeadm init操作，其他的操作都需要进行。
+- 在子节点安装好kubeadm,kubectl工具后，执行如下操作，将节点加入k8s集群。
+- 子节点安装后，需要 systemctl enable kubelet 然后重启服务器 reboot
+
+1. 查看集群信息
+```shell
+$ kubectl get nodes
+# 可能会报错 localhost:10248拒绝访问,这个无解,重装系统解决，然后执行 kubeadm reset
+```
+2. 需要将master节点的 /etc/kubernetes/admin.conf复制到node节点的相同位置
+```shell
+# 这2条命令，在master节点执行，复制文件到子节点上
+$ scp /etc/kubernetes/admin.conf 192.168.0.14:/etc/kubernetes/
+$ scp /etc/kubernetes/admin.conf 192.168.0.15:/etc/kubernetes/
+```
+
+3. 在子节点上执行下面的代码加入环境变量
+```shell
+echo "export KUBECONFIG=/etc/kubernetes/admin.conf" >> ~/.bash_profile
+source  ~/.bash_profile
+```
+确保docker执行的方式
+```shell
+cat /etc/docker/daemon.json
+# 是否是下面的配置
+"exec-opts": ["native.cgroupdriver=systemd"]
+```
+4. 重新加载配置
+```shell
+systemctl daemon-reload
+systemctl restart docker
+docker info | grep Cgroup
+```
+5. 部署calico网络插件（参考master节点calico网络配置）
+6. 在子节点机器上执行如下命令，加入集群
+```shell
+kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
+        --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
+```
 
 # k8s自动补全
 ```shell
