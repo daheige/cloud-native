@@ -150,13 +150,15 @@ grep initrd16 /boot/grub2/grub.cfg
         initrd16 /initramfs-3.10.0-1160.71.1.el7.x86_64.img
         initrd16 /initramfs-0-rescue-99154e8e519f0b45915b4455414e80d4.img
 grub2-set-default 0
+# 重启
 reboot
 ```
-查看centos系统内核命令:
+
+8. 查看centos系统内核命令，确保升级成功
 ```shell
-uname -r 
-uname -a
+uname -ar
 ```
+
 查看cpu命令：
 ```shell
 lscpu
@@ -175,17 +177,33 @@ fdisk -l
 ```
 
 # centos7系统配置
-1. 关闭防火墙
+1. hosts 配置
+vi /etc/hosts 添加如下内容
+```
+192.168.0.13 k8s-master01 
+192.168.0.14 k8s-node01 
+192.168.0.15 k8s-node02
+```
+:wq
+
+子节点主机名设置
+安装好对应的子节点后，设置主机，以 k8s-node01 为例子
+```shell
+hostnamectl set-hostname k8s-node01
+#hostnamectl set-hostname k8s-node02
+```
+
+2. 关闭防火墙
 ```shell
 systemctl stop firewalld 
 systemctl disable firewalld
 ```
-2. 关闭 selinux
+3. 关闭 selinux
 ```shell
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=disabled/' /etc/selinux/config
 setenforce 0
 ```
-3. 网桥过滤
+4. 网桥过滤
 vim /etc/sysctl.conf
 ```
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -201,7 +219,7 @@ net.ipv4.ip_forward_use_pmtu = 0
 sysctl --system
 sysctl -a|grep "ip_forward"
 ```
-4. 开启 IPVS
+5. 开启 IPVS
 ```shell
 yum -y install ipset ipvsdm
 ```
@@ -245,7 +263,7 @@ ip_vs_rr               16384  0
 ip_vs                 155648  6 ip_vs_rr,ip_vs_sh,ip_vs_wrr
 ```
 
-5. 同步时间
+6. 同步时间
 ```shell
 yum -y install ntpdate
 ntpdate cn.pool.ntp.org
@@ -254,7 +272,7 @@ rm -rf /etc/localtime
 ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ```
 
-# 设置计划任务 crontab -e 添加
+设置计划任务 crontab -e 添加
 ```shell
 */5 * * * * ntpdate cn.pool.ntp.org
 ```
@@ -263,14 +281,14 @@ ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ```shell
 date -R || date
 ```
-6. 命令补全
+7. 命令补全
 ```shell
 # 安装bash-completion 
 yum -y install bash-completion bash-completion-extras 
 # 使用bash-completion 
 source /etc/profile.d/bash_completion.sh
 ```
-7. 关闭 swap 分区
+8. 关闭 swap 分区
 ```shell
 # 临时关闭
 swapoff -a
@@ -282,21 +300,6 @@ sed -ri 's/.*swap.*/#&/' /etc/fstab
 # /dev/mapper/centos-swap swap swap defaults 0 0
 # 确认swap已经关闭：若swap行都显示 0 则表示关闭成功
 free -m
-```
-8. hosts 配置
-vi /etc/hosts 添加如下内容
-```
-192.168.0.13 k8s-master01 
-192.168.0.14 k8s-node01 
-192.168.0.15 k8s-node02
-```
-:wq
-
-# 子节点主机名设置
-安装好对应的子节点后，设置主机，以 k8s-node01 为例子
-```shell
-hostnamectl set-hostname k8s-node01
-#hostnamectl set-hostname k8s-node02
 ```
 
 # 安装docker
