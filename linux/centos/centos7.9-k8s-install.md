@@ -344,7 +344,7 @@ systemctl enable docker
 systemctl enable containerd
 ```
 
-# 设置 Docker daemon 文件
+# Docker镜像配置
 ```shell
 # 创建目录用来存放 daemon.json
 $ cd /etc/docker
@@ -508,7 +508,7 @@ openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outfor
    openssl dgst -sha256 -hex | sed 's/^.* //'
 ```
 
-如果忘记了token，通过下面的命令重新生成
+如果忘记了token，通过下面的命令重新生成(推荐这种方式)
 ```shell
 kubeadm token create --print-join-command
 ```
@@ -545,7 +545,6 @@ systemctl restart kubelet  #重启kubelet
 3. 使用kubectl管理工具初始化，执行以下命令可使用kubectl管理工具
 ```shell
 # 对于非root用户，设置kubectl
-```shell
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
@@ -596,7 +595,6 @@ kubectl apply -f calico.yml
 kubectl get nodes
 NAME           STATUS   ROLES                  AGE     VERSION
 k8s-master01   Ready    control-plane,master   6m51s   v1.21.3
-
 ```
 到此处表明k8s集群部署成功～
 
@@ -675,6 +673,46 @@ alias k=kubectl   # 在文件～/.bashrc文件中新增一行
 #使别名和自动补全同时生效
 complete -F __start_kubectl k
 ```
+# dashboard安装
+官方地址：https://github.com/kubernetes/dashboard/releases
+选择合适的Kubernetes version版本，然后选择对应的版本下载
+1. 复制：https://github.com/kubernetes/dashboard/blob/v2.4.0/aio/deploy/recommended.yaml 里面的全部内容，并命名为 recommended.yaml
+2. 执行如下命令(master节点运行)
+```shell
+#这里我直接scp文件到master节点上
+scp recommended.yaml root@192.168.0.13:/data/
+kubectl apply -f recommended.yaml
+```
+
+3. 查看是否安装成功
+```shell
+kubectl get pod -n kubernetes-dashboard
+```
+4. 获取登陆的token
+```shell
+kubectl -n kube-system describe $(kubectl -n kube-system get secret -n kube-system -o name | grep namespace) | grep token
+```
+5. 开启 API Server 访问代理
+通过 kubectl proxy 访问 dashboard
+```shell
+kubectl proxy --address='192.168.0.13' --accept-hosts='^*$' --accept-paths='^.*' --disable-filter=true --port=8080
+```
+浏览器访问需要输入上一步的token：http://192.168.0.13:8080/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
+
+输入token即可访问，如果提示错误的话，在master节点上执行 kubectl -n kubernetes-dashboard edit service kubernetes-dashboard
+```yaml
+sessionAffinity: None
+  #type: ClusterIP
+  type:NodePort
+```
+:wq之后，查看状态
+```shell
+kubectl get svc -n kubernetes-dashboard
+NAME                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)         AGE
+dashboard-metrics-scraper   ClusterIP   10.106.90.254   <none>        8000/TCP        47m
+kubernetes-dashboard        NodePort    10.99.59.140    <none>        443:32478/TCP   47m
+```
+再次访问：https://192.168.0.13:32478/#/login 输入token就可以进入dashboard面板
 
 # 关于k8s网络配置
 除了calico外，也可以使用 flannel配置网络
@@ -685,7 +723,7 @@ wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-
 kubectl apply -f kube-flannel.yml
 ```
 
-# k8s环境搭建--参考地址
+# k8s环境搭建参考
 - https://juejin.cn/post/7156220816529555487
 - https://juejin.cn/post/6850418111942754317
 - https://juejin.cn/post/6950166816182239246
@@ -693,3 +731,8 @@ kubectl apply -f kube-flannel.yml
 - https://www.cnblogs.com/chaofan-/p/12930199.html
 - https://juejin.cn/post/6971674359975018532
 - https://juejin.cn/post/7107954026875977764
+
+# dashboard 参考
+- https://blog.csdn.net/qq_33921750/article/details/121026799
+- https://www.jianshu.com/p/d74460bfd265 dashboard proxy
+- https://github.com/kubernetes/dashboard/blob/v2.4.0/aio/deploy/recommended.yaml
