@@ -748,3 +748,4 @@ kubectl apply -f kube-flannel.yml
 - https://blog.csdn.net/qq_33921750/article/details/121026799
 - https://www.jianshu.com/p/d74460bfd265 dashboard proxy
 - https://github.com/kubernetes/dashboard/blob/v2.4.0/aio/deploy/recommended.yaml
+- https://www.cnblogs.com/liujitao79/p/15527878.html kubernetes 1.21部署 dashboard
