@@ -134,10 +134,10 @@ yum clean all && yum makecache
 ```
 6. 看一下yum仓库包
 ```shell
-yum repolist
+# 更新yum
 yum update -y
 
-#安装必要的软件包
+# 安装必要的软件包
 yum install -y conntrack ntpdate ntp ipvsadm ipset jq iptables curl sysstat libseccomp vim net-tools git iproute bash-completion tree bridge-utils unzip bind-utils gcc
 ```
 7. 升级系统内核
@@ -404,27 +404,20 @@ yum -y makecache
 2. 安装 kubeadm / kubelet / kubectl 并启动 kubelet
 ```shell
 yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3
-
-# 设置开机启动
-systemctl enable --now kubelet
 ```
 
-3. 查看kubeadm、kubelet版本
-```shell
-# kubelet --version
-Kubernetes v1.21.3
-```
-4. 增加配置信息
+3. 增加配置信息
 ```shell
 # 如果不配置kubelet，可能会导致K8S集群无法启动。为实现docker使用的cgroupdriver与kubelet 使用的cgroup的一致性。
 vi /etc/sysconfig/kubelet
 KUBELET_EXTRA_ARGS="--cgroup-driver=systemd"
 
+mkdir -p /var/lib/kubelet
 vim /var/lib/kubelet/kubeadm-flags.env
 KUBELET_KUBEADM_ARGS="--network-plugin=cni --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.4.1"
 ```
 
-5. 查看k8s需要的镜像
+4. 查看k8s需要的镜像
 ```shell
 #查看会拉取的镜像清单
 kubeadm config images list
@@ -439,6 +432,17 @@ k8s.gcr.io/coredns/coredns:v1.8.0
 #手动提前拉取镜像，可以看到拉取过程及拉取情况
 kubeadm config images pull --image-repository registry.aliyuncs.com/google_containers
 
+```
+
+5. 设置开机启动
+```shell
+systemctl enable --now kubelet
+```
+
+6. 查看kubeadm、kubelet版本
+```shell
+# kubelet --version
+Kubernetes v1.21.3
 ```
 
 # 部署k8s集群
