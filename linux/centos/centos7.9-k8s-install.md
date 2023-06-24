@@ -406,7 +406,7 @@ yum -y makecache
 yum install -y kubelet-1.21.3 kubeadm-1.21.3 kubectl-1.21.3
 ```
 
-3. 增加配置信息
+3. 增加kubelet配置信息
 ```shell
 # 如果不配置kubelet，可能会导致K8S集群无法启动。为实现docker使用的cgroupdriver与kubelet 使用的cgroup的一致性。
 vi /etc/sysconfig/kubelet
@@ -495,9 +495,19 @@ Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
 
 Then you can join any number of worker nodes by running the following on each as root:
 
-kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
-        --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
+kubeadm join 192.168.0.13:6443 --token r6o9w9.fuiw6slac3nq16x0 \
+        --discovery-token-ca-cert-hash sha256:f8571666871d33b526a70ea91daed64c25fca7fa37f11385d5f43d7071af41e0
 ```
+查看token list
+```shell
+# 查看token list
+kubeadm token list
+# 查看hash值
+# 如果你没有 --discovery-token-ca-cert-hash 的值，则可以通过在控制平面节点上执行以下命令链来获取它
+openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | \
+   openssl dgst -sha256 -hex | sed 's/^.* //'
+```
+
 如果忘记了token，通过下面的命令重新生成
 ```shell
 kubeadm token create --print-join-command
@@ -610,6 +620,10 @@ $ scp /etc/kubernetes/admin.conf 192.168.0.15:/etc/kubernetes/
 
 3. 在子节点上执行下面的代码加入环境变量
 ```shell
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
 echo "export KUBECONFIG=/etc/kubernetes/admin.conf" >> ~/.bash_profile
 source  ~/.bash_profile
 ```
@@ -628,8 +642,20 @@ docker info | grep Cgroup
 5. 部署calico网络插件（参考master节点calico网络配置）
 6. 在子节点机器上执行如下命令，加入集群
 ```shell
-kubeadm join 192.168.0.13:6443 --token k2d0kq.4rtzes1yx7tywy9m \
-        --discovery-token-ca-cert-hash sha256:3afb9bdeacaffdc31e7f7ea6f38edca0fe57b504549e53bea89d0ecd2cffb85b
+kubeadm join 192.168.0.13:6443 --token r6o9w9.fuiw6slac3nq16x0 \
+        --discovery-token-ca-cert-hash sha256:f8571666871d33b526a70ea91daed64c25fca7fa37f11385d5f43d7071af41e0
+```
+查看节点情况
+```shell
+kubectl get nodes
+NAME           STATUS   ROLES                  AGE   VERSION
+k8s-master01   Ready    control-plane,master   23m   v1.21.3
+k8s-node01     Ready    <none>                 16m   v1.21.3
+k8s-node02     Ready    <none>                 13m   v1.21.3
+#执行完后，发现整个 k8s 集群环境是正常的了。至此，k8s集群搭建实战完成
+#查看kube-system状态
+kubectl get pod -n kube-system -o wide
+kubectl get pod -n kube-system -o wide
 ```
 
 # k8s自动补全
@@ -659,7 +685,7 @@ wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-
 kubectl apply -f kube-flannel.yml
 ```
 
-# 参考地址
+# k8s环境搭建--参考地址
 - https://juejin.cn/post/7156220816529555487
 - https://juejin.cn/post/6850418111942754317
 - https://juejin.cn/post/6950166816182239246
