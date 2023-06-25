@@ -140,3 +140,64 @@ docker run -d --name web -p 80:80 myweb:v1
     ```
 # 操作容器
 容器是 Docker 又一核心概念。 简单的说，容器是独立运行的一个或一组应用，以及它们的运行态环境。对应的，虚拟机可以理解为模 拟运行的一整套操作系统（提供了运行态环境和其他系统环境）和跑在上面的应用。
+
+# 启动容器
+```shell
+docker run -itd 镜像 xxx --name xxx
+```
+比如说：
+```shell
+docker run ubuntu:20.04 /bin/echo "hello,world"
+hello,world
+```
+-t 选项让Docker分配一个伪终端（pseudo-tty）并绑定到容器的标准输入上
+-i 则让容器的标准输入保持打开
+-d 让 Docker 在后台运行而不是直接把执行命令的结果输出在当前宿主机下
+
+```shell
+ocker run -ti ubuntu:20.04 /bin/bash
+root@6393cc883b98:/# ls
+```
+
+# 停止容器
+```shell
+docker stop e578fdddcc9dc
+e578fdddcc9dc
+```
+# 进入容器
+```shell
+docker run -itd ubuntu:20.04
+e20b0dd2ecf50a7fc66cf42c8b2ea66de7e7ff4c44cde3f82a9e6bd82ac29e4c
+$ docker exec -it e20b0dd2 /bin/bash
+```
+# 删除容器
+```shell
+docker rm f848d2a -f
+f848d2a
+```
+-f 表示强制删除
+
+# 清理所有处于终止状态的容器
+```
+#以查看所有已经创建的包括终止状态的容器
+docker container ls -a
+#清理已终止的容器
+docker container prune
+```
+
+# 搜索镜像
+```shell
+docker search centos --filter=stars=10
+```
+--filter=stars=N 参数可以指定仅显示收藏数量为 N 以上的镜像
+
+# 给镜像打tag
+```shell
+docker tag ubuntu:20.04 daheige/ubuntu:18.04
+```
+
+# 推送镜像
+```shell
+docker login
+docker push daheige/ubuntu:20.04
+```
