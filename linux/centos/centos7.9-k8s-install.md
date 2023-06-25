@@ -649,13 +649,12 @@ systemctl daemon-reload
 systemctl restart docker
 docker info | grep Cgroup
 ```
-5. 部署calico网络插件（参考master节点calico网络配置）
-6. 在子节点机器上执行如下命令，加入集群
+5. 在子节点机器上执行如下命令，加入集群
 ```shell
 kubeadm join 192.168.0.13:6443 --token r6o9w9.fuiw6slac3nq16x0 \
         --discovery-token-ca-cert-hash sha256:f8571666871d33b526a70ea91daed64c25fca7fa37f11385d5f43d7071af41e0
 ```
-查看节点情况
+查看k8s集群节点运行情况
 ```shell
 kubectl get nodes
 NAME           STATUS   ROLES                  AGE   VERSION
